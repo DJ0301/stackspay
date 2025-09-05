@@ -1,0 +1,78 @@
+{
+  "platform": {
+    "name": "StacksPay",
+    "description": "Bitcoin payment gateway using sBTC on Stacks blockchain",
+    "tagline": "Pay with Bitcoin. Instantly.",
+    "features": [
+      "Instant Bitcoin payments via sBTC",
+      "Payment links and embedded checkout",
+      "Real-time transaction monitoring",
+      "Merchant dashboard and analytics",
+      "Customer management",
+      "Product catalog",
+      "Webhook integrations",
+      "API for developers"
+    ]
+  },
+  "sbtc": {
+    "definition": "sBTC is a Bitcoin-backed asset on the Stacks blockchain that maintains a 1:1 peg with Bitcoin",
+    "benefits": [
+      "Instant transactions compared to Bitcoin mainnet",
+      "Lower transaction fees",
+      "Smart contract functionality",
+      "Maintains Bitcoin's value",
+      "Redeemable for real Bitcoin"
+    ],
+    "how_it_works": "sBTC is minted by locking Bitcoin and burned to unlock Bitcoin, maintaining the peg through a decentralized protocol"
+  },
+  "bitcoin": {
+    "basics": "Bitcoin is the first and largest cryptocurrency, created by Satoshi Nakamoto in 2009",
+    "properties": [
+      "Decentralized digital currency",
+      "Limited supply of 21 million coins",
+      "Secured by proof-of-work mining",
+      "Peer-to-peer transactions",
+      "Store of value and medium of exchange"
+    ],
+    "units": {
+      "1 BTC": "100,000,000 satoshis",
+      "1 satoshi": "0.00000001 BTC",
+      "common_denominations": ["BTC", "mBTC (millibitcoin)", "μBTC (microbitcoin)", "satoshi"]
+    }
+  },
+  "payments": {
+    "process": [
+      "Merchant creates payment request",
+      "Customer receives payment link or uses embedded checkout",
+      "Customer connects wallet (Leather, Xverse, etc.)",
+      "Customer confirms sBTC transaction",
+      "Transaction is broadcast to Stacks network",
+      "Payment is confirmed and merchant is notified"
+    ],
+    "supported_wallets": ["Leather Wallet", "Xverse", "Hiro Wallet"],
+    "networks": ["Stacks Testnet", "Stacks Mainnet"]
+  },
+  "merchant_features": {
+    "dashboard": "View payment analytics, revenue, and transaction history",
+    "payment_links": "Create shareable payment links with custom amounts",
+    "products": "Manage product catalog with sBTC pricing",
+    "customers": "Track customer information and purchase history",
+    "api": "RESTful API for custom integrations",
+    "webhooks": "Real-time notifications for payment events",
+    "settings": "Configure withdrawal addresses and preferences"
+  },
+  "common_questions": {
+    "how_to_accept_payments": "Create a payment link or use our embedded checkout widget on your website",
+    "transaction_fees": "sBTC transactions have minimal fees compared to Bitcoin mainnet",
+    "settlement_time": "Payments settle in seconds to minutes on Stacks",
+    "wallet_setup": "Users need a Stacks-compatible wallet like Leather or Xverse",
+    "bitcoin_conversion": "sBTC maintains 1:1 peg with Bitcoin and can be redeemed for BTC",
+    "security": "Secured by Bitcoin's hash power through Stacks' Proof of Transfer consensus"
+  },
+  "troubleshooting": {
+    "payment_stuck": "Check transaction status on Stacks Explorer, may need wallet confirmation",
+    "wallet_connection": "Ensure wallet is unlocked and connected to correct network",
+    "balance_issues": "Verify sBTC balance in wallet and network connectivity",
+    "api_errors": "Check API documentation and ensure proper authentication"
+  }
+}
