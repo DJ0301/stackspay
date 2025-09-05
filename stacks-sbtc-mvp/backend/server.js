@@ -1736,11 +1736,14 @@ app.post('/api/auth/login', async (req, res) => {
 });
 
 // Start Server
-app.listen(PORT, () => {
-  console.log(`Enhanced sBTC Payment Gateway API running on port ${PORT}`);
-  console.log(`Network: ${NETWORK}`);
-  console.log(`Contract: ${CONTRACT_ADDRESS}.${CONTRACT_NAME}`);
-  console.log(`Merchant: ${MERCHANT_ADDRESS}`);
-});
+// Only start a local HTTP server when not running on Vercel
+if (!process.env.VERCEL) {
+  app.listen(PORT, () => {
+    console.log(`Enhanced sBTC Payment Gateway API running on port ${PORT}`);
+    console.log(`Network: ${NETWORK}`);
+    console.log(`Contract: ${CONTRACT_ADDRESS}.${CONTRACT_NAME}`);
+    console.log(`Merchant: ${MERCHANT_ADDRESS}`);
+  });
+}
 
 export default app;

@@ -12,22 +12,10 @@
   ],
   "routes": [
     {
-      "src": "/api/(.*)",
-      "dest": "https://your-backend-url.com/api/$1",
-      "headers": {
-        "Access-Control-Allow-Origin": "*",
-        "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
-        "Access-Control-Allow-Headers": "Content-Type, Authorization"
-      }
-    },
-    {
       "src": "/(.*)",
       "dest": "/index.html"
     }
   ],
-  "env": {
-    "VITE_BACKEND_URL": "@backend-url"
-  },
   "buildCommand": "npm run build",
   "outputDirectory": "dist",
   "installCommand": "npm install",
