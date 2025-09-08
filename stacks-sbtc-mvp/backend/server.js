@@ -383,8 +383,12 @@ class PriceFeedService {
     this.sources = {
       coingecko: 'https://api.coingecko.com/api/v3/simple/price?ids=bitcoin&vs_currencies=usd',
       binance: 'https://api.binance.com/api/v3/ticker/price?symbol=BTCUSDT',
-      coinbase: 'https://api.coinbase.com/v2/exchange-rates?currency=BTC'
+      coinbase: 'https://api.coinbase.com/v2/exchange-rates?currency=BTC',
+      kraken: 'https://api.kraken.com/0/public/Ticker?pair=XXBTZUSD',
+      bitstamp: 'https://www.bitstamp.net/api/v2/ticker/btcusd',
+      coindesk: 'https://api.coindesk.com/v1/bpi/currentprice/BTC.json'
     };
+    this.disable = (process.env.DISABLE_PRICE_FEED || 'true').toLowerCase() !== 'false';
   }
 
   async getBTCPrice() {
@@ -393,6 +397,20 @@ class PriceFeedService {
     
     if (cached && Date.now() - cached.timestamp < 60000) { // 1 minute cache
       return cached.price;
+    }
+
+    // Environment override for emergency/manual control
+    const override = parseFloat(process.env.BTC_PRICE_OVERRIDE || '');
+    if (!Number.isNaN(override) && override > 0) {
+      this.cache.set(cacheKey, { price: override, timestamp: Date.now() });
+      return override;
+    }
+
+    // If price feed is disabled, avoid any external calls
+    if (this.disable) {
+      const fallback = 0;
+      this.cache.set(cacheKey, { price: fallback, timestamp: Date.now() });
+      return fallback;
     }
 
     let prices = [];
@@ -412,9 +430,31 @@ class PriceFeedService {
       const coinbase = await axios.get(this.sources.coinbase);
       prices.push(parseFloat(coinbase.data.data.rates.USD));
     } catch (e) { console.error('Coinbase failed:', e.message); }
+
+    try {
+      const kraken = await axios.get(this.sources.kraken);
+      // Kraken returns { result: { XXBTZUSD: { c: [ 'price', volume ] }}}
+      const pairKey = Object.keys(kraken.data?.result || {})[0];
+      const lastTrade = kraken.data?.result?.[pairKey]?.c?.[0];
+      if (lastTrade) prices.push(parseFloat(lastTrade));
+    } catch (e) { console.error('Kraken failed:', e.message); }
+
+    try {
+      const bitstamp = await axios.get(this.sources.bitstamp);
+      if (bitstamp.data?.last) prices.push(parseFloat(bitstamp.data.last));
+    } catch (e) { console.error('Bitstamp failed:', e.message); }
+
+    try {
+      const coindesk = await axios.get(this.sources.coindesk);
+      const p = coindesk.data?.bpi?.USD?.rate_float;
+      if (p) prices.push(parseFloat(p));
+    } catch (e) { console.error('CoinDesk failed:', e.message); }
     
     if (prices.length === 0) {
-      return cached ? cached.price : 100000; // Fallback price
+      // Robust fallback closer to current market regime
+      const fallback = 0;
+      this.cache.set(cacheKey, { price: fallback, timestamp: Date.now() });
+      return cached ? cached.price : fallback; // Sensible default if all sources fail
     }
     
     // Calculate median price
@@ -427,11 +467,13 @@ class PriceFeedService {
 
   async convertBTCtoUSD(btcAmount) {
     const price = await this.getBTCPrice();
+    if (!price || price <= 0) return 0;
     return btcAmount * price;
   }
 
   async convertUSDtoBTC(usdAmount) {
     const price = await this.getBTCPrice();
+    if (!price || price <= 0) return 0;
     return usdAmount / price;
   }
 }
@@ -550,10 +592,14 @@ class ChatbotService {
   constructor() {
     this.apiUrl = 'https://api.groq.com/openai/v1/chat/completions';
     this.model = 'llama-3.1-8b-instant';
-    this.systemPrompt = this.buildSystemPrompt();
+    this.systemPrompt = '';
+    // Initialize asynchronously to include live price
+    this.refreshSystemPrompt();
   }
 
-  buildSystemPrompt() {
+  async buildSystemPrompt() {
+    const btcPrice = await priceFeed.getBTCPrice().catch(() => null);
+    // const priceLine = btcPrice ? `- Current BTC/USD: $${btcPrice.toLocaleString('en-US', { maximumFractionDigits: 2 })}\n- sBTC price equals BTC price (1:1 peg)` : `- sBTC price equals BTC price (1:1 peg)`;
     return `You are StacksBot, the official AI assistant for StacksPay - a Bitcoin payment gateway using sBTC on the Stacks blockchain.
 
 STRICT GUIDELINES:
@@ -563,6 +609,8 @@ STRICT GUIDELINES:
 - Keep responses concise and practical
 - Always be helpful and professional
 - When users ask for specific data (revenue, payments, etc.), provide actual numbers from their account
+- Never ask for or collect credentials or secrets (passwords, private keys, seed phrases, 2FA codes, dashboard logins). If data is unavailable, state what is missing and suggest how to generate it within StacksPay.
+- Use the contextual merchant data included in the system prompt to answer directly. If topProduct/bottomProduct are present, report those without requesting any product IDs or logins.
 
 YOUR KNOWLEDGE BASE:
 ${JSON.stringify(chatbotKnowledge, null, 2)}
@@ -584,7 +632,13 @@ RESPONSE RULES:
 - Never provide financial advice or price predictions`;
   }
 
-  async getMerchantData(query) {
+  async refreshSystemPrompt() {
+    this.systemPrompt = await this.buildSystemPrompt();
+    // Periodically refresh price in the system prompt
+    setTimeout(() => this.refreshSystemPrompt(), 60_000);
+  }
+
+  async getMerchantData(query, merchantAddress) {
     try {
       // Determine date range based on query
       const now = new Date();
@@ -625,18 +679,53 @@ RESPONSE RULES:
         endDate.setHours(23, 59, 59, 999);
         period = 'last month';
       } else {
-        return null; // No specific period requested
+        // Default to the last 7 days if no specific period requested
+        endDate = new Date();
+        endDate.setHours(23, 59, 59, 999);
+        startDate = new Date(endDate);
+        startDate.setDate(endDate.getDate() - 6);
+        startDate.setHours(0, 0, 0, 0);
+        period = 'last 7 days';
       }
 
       // Fetch payments data for the period
-      const payments = await Payment.find({
+      const baseMatch = {
         createdAt: { $gte: startDate, $lte: endDate },
         status: 'completed'
-      });
+      };
+      if (merchantAddress) {
+        baseMatch.merchantAddress = merchantAddress;
+      }
+
+      const payments = await Payment.find(baseMatch);
 
       const totalRevenue = payments.reduce((sum, payment) => sum + (payment.amount || 0), 0);
       const totalPayments = payments.length;
       const totalRevenueUSD = payments.reduce((sum, payment) => sum + (payment.amountUSD || 0), 0);
+
+      // Compute product performance if product metadata is available
+      const byProduct = new Map();
+      for (const p of payments) {
+        const pid = p.metadata?.productId;
+        if (!pid) continue;
+        const cur = byProduct.get(pid) || { revenue: 0, payments: 0 };
+        cur.revenue += p.amount || 0;
+        cur.payments += 1;
+        byProduct.set(pid, cur);
+      }
+
+      let topProduct = null;
+      let bottomProduct = null;
+      if (byProduct.size > 0) {
+        // Resolve names from Product collection
+        const ids = Array.from(byProduct.keys());
+        const products = await Product.find({ id: { $in: ids } });
+        const productMap = new Map(products.map(pr => [pr.id, pr]));
+        const ranked = ids.map(id => ({ id, name: productMap.get(id)?.name || id, ...byProduct.get(id) }))
+          .sort((a, b) => b.revenue - a.revenue);
+        topProduct = ranked[0];
+        bottomProduct = ranked[ranked.length - 1];
+      }
 
       return {
         period,
@@ -655,7 +744,9 @@ RESPONSE RULES:
         totalRevenue: totalRevenue.toFixed(8),
         totalRevenueUSD: totalRevenueUSD.toFixed(2),
         totalPayments,
-        avgPayment: totalPayments > 0 ? (totalRevenue / totalPayments).toFixed(8) : '0.00000000'
+        avgPayment: totalPayments > 0 ? (totalRevenue / totalPayments).toFixed(8) : '0.00000000',
+        topProduct,
+        bottomProduct
       };
     } catch (error) {
       console.error('Error fetching merchant data:', error);
@@ -663,7 +754,99 @@ RESPONSE RULES:
     }
   }
 
-  async chat(message) {
+  async getCustomerInsights(query, merchantAddress) {
+    try {
+      const now = new Date();
+      let startDate, endDate, period;
+
+      if (query.includes('last week')) {
+        const today = new Date();
+        const dayOfWeek = today.getDay();
+        const daysToLastMonday = dayOfWeek === 0 ? 13 : dayOfWeek + 6;
+        endDate = new Date(today);
+        endDate.setDate(today.getDate() - daysToLastMonday);
+        endDate.setHours(23, 59, 59, 999);
+        startDate = new Date(endDate);
+        startDate.setDate(endDate.getDate() - 6);
+        startDate.setHours(0, 0, 0, 0);
+        period = 'last week';
+      } else if (query.includes('this week')) {
+        const today = new Date();
+        const dayOfWeek = today.getDay();
+        const daysToMonday = dayOfWeek === 0 ? 6 : dayOfWeek - 1;
+        startDate = new Date(today);
+        startDate.setDate(today.getDate() - daysToMonday);
+        startDate.setHours(0, 0, 0, 0);
+        endDate = new Date();
+        period = 'this week';
+      } else if (query.includes('last month')) {
+        const lastMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+        startDate = lastMonth;
+        endDate = new Date(now.getFullYear(), now.getMonth(), 0);
+        endDate.setHours(23, 59, 59, 999);
+        period = 'last month';
+      } else {
+        endDate = new Date();
+        endDate.setHours(23, 59, 59, 999);
+        startDate = new Date(endDate);
+        startDate.setDate(endDate.getDate() - 6);
+        startDate.setHours(0, 0, 0, 0);
+        period = 'last 7 days';
+      }
+
+      const matchPayments = {
+        createdAt: { $gte: startDate, $lte: endDate },
+        status: 'completed',
+        'metadata.customerEmail': { $exists: true, $ne: null }
+      };
+      if (merchantAddress) matchPayments.merchantAddress = merchantAddress;
+
+      const periodPayments = await Payment.find(matchPayments);
+      const byEmail = new Map();
+      for (const p of periodPayments) {
+        const email = p.metadata?.customerEmail;
+        if (!email) continue;
+        const cur = byEmail.get(email) || { revenue: 0, orders: 0 };
+        cur.revenue += p.amount || 0;
+        cur.orders += 1;
+        byEmail.set(email, cur);
+      }
+
+      let topByRevenue = null;
+      let topByOrders = null;
+      if (byEmail.size > 0) {
+        const emails = Array.from(byEmail.keys());
+        const customers = await Customer.find({ email: { $in: emails }, ...(merchantAddress ? { merchantAddress } : {}) });
+        const cmap = new Map(customers.map(c => [c.email, c]));
+        const rankedRevenue = emails.map(e => ({ email: e, name: cmap.get(e)?.name || e, ...byEmail.get(e) }))
+          .sort((a, b) => b.revenue - a.revenue);
+        const rankedOrders = emails.map(e => ({ email: e, name: cmap.get(e)?.name || e, ...byEmail.get(e) }))
+          .sort((a, b) => b.orders - a.orders);
+        topByRevenue = rankedRevenue[0];
+        topByOrders = rankedOrders[0];
+      }
+
+      const newCustomersQuery = {
+        firstPurchaseDate: { $gte: startDate, $lte: endDate }
+      };
+      if (merchantAddress) newCustomersQuery.merchantAddress = merchantAddress;
+      const newCustomers = await Customer.countDocuments(newCustomersQuery).catch(() => 0);
+
+      return {
+        period,
+        startDate: startDate.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' }),
+        endDate: endDate.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' }),
+        topCustomerByRevenue: topByRevenue,
+        topCustomerByOrders: topByOrders,
+        newCustomers
+      };
+    } catch (e) {
+      console.error('Error fetching customer insights:', e);
+      return null;
+    }
+  }
+
+  async chat(message, opts = {}) {
     if (!GROQ_API_KEY) {
       return { error: 'Chatbot service not configured' };
     }
@@ -673,16 +856,42 @@ RESPONSE RULES:
       
       // Check if user is asking for specific data
       const dataQuery = message.toLowerCase();
-      if (dataQuery.includes('revenue') || dataQuery.includes('earnings') || dataQuery.includes('sales')) {
-        const merchantData = await this.getMerchantData(dataQuery);
-        if (merchantData) {
-          contextualData = `\n\nCURRENT MERCHANT DATA:
-Period: ${merchantData.period} (${merchantData.startDate} to ${merchantData.endDate})
-Total Revenue: ${merchantData.totalRevenue} sBTC ($${merchantData.totalRevenueUSD} USD)
-Total Payments: ${merchantData.totalPayments}
-Average Payment: ${merchantData.avgPayment} sBTC
+      const wantsData = (
+        dataQuery.includes('revenue') ||
+        dataQuery.includes('earnings') ||
+        dataQuery.includes('sales') ||
+        (dataQuery.includes('best') && dataQuery.includes('product')) ||
+        dataQuery.includes('top product') ||
+        dataQuery.includes('top products') ||
+        dataQuery.includes('products performance') ||
+        (dataQuery.includes('worst') && dataQuery.includes('product')) ||
+        dataQuery.includes('least performing product') ||
+        dataQuery.includes('lowest performing product') ||
+        dataQuery.includes('customer') ||
+        dataQuery.includes('customers') ||
+        dataQuery.includes('top customer') ||
+        dataQuery.includes('best customer') ||
+        dataQuery.includes('top spender') ||
+        dataQuery.includes('new customers')
+      );
 
-Use this actual data to answer the user's question with specific numbers and dates.`;
+      const merchantAddress = opts.merchantAddress || MERCHANT_ADDRESS;
+
+      if (wantsData) {
+        const merchantData = await this.getMerchantData(dataQuery, merchantAddress);
+        if (merchantData) {
+          contextualData = `\n\nCURRENT MERCHANT DATA:\nPeriod: ${merchantData.period} (${merchantData.startDate} to ${merchantData.endDate})\nTotal Revenue: ${merchantData.totalRevenue} sBTC ($${merchantData.totalRevenueUSD} USD)\nTotal Payments: ${merchantData.totalPayments}\nAverage Payment: ${merchantData.avgPayment} sBTC\n${merchantData.topProduct ? `Top Product: ${merchantData.topProduct.name} (Revenue: ${merchantData.topProduct.revenue.toFixed(8)} sBTC, Payments: ${merchantData.topProduct.payments})` : ''}\n${merchantData.bottomProduct ? `Worst Product: ${merchantData.bottomProduct.name} (Revenue: ${merchantData.bottomProduct.revenue.toFixed(8)} sBTC, Payments: ${merchantData.bottomProduct.payments})` : ''}\n\nUse this actual data to answer the user's question with specific numbers and dates.`;
+          if ((!merchantData.topProduct || merchantData.topProduct.payments === 0) && (dataQuery.includes('best') || dataQuery.includes('top') || dataQuery.includes('worst'))) {
+            contextualData += `\n\nGUIDANCE: There are no product sales in this period; explicitly state that no best/worst product can be determined without asking for any IDs or credentials.`
+          }
+        }
+
+        // If the query mentions customers, add customer insights context
+        if (dataQuery.includes('customer')) {
+          const customerData = await this.getCustomerInsights(dataQuery, merchantAddress);
+          if (customerData) {
+            contextualData += `\n\nCUSTOMER INSIGHTS:\nPeriod: ${customerData.period} (${customerData.startDate} to ${customerData.endDate})\n${customerData.topCustomerByRevenue ? `Top Customer by Revenue: ${customerData.topCustomerByRevenue.name} (${customerData.topCustomerByRevenue.revenue.toFixed(8)} sBTC, Orders: ${customerData.topCustomerByRevenue.orders})` : 'Top Customer by Revenue: N/A'}\n${customerData.topCustomerByOrders ? `Top Customer by Orders: ${customerData.topCustomerByOrders.name} (${customerData.topCustomerByOrders.orders} orders, ${customerData.topCustomerByOrders.revenue.toFixed(8)} sBTC)` : 'Top Customer by Orders: N/A'}\nNew Customers: ${customerData.newCustomers}`;
+          }
         }
       }
 
@@ -693,7 +902,7 @@ Use this actual data to answer the user's question with specific numbers and dat
           { role: 'user', content: message }
         ],
         max_tokens: 500,
-        temperature: 0.7
+        temperature: 0.2
       }, {
         headers: {
           'Authorization': `Bearer ${GROQ_API_KEY}`,
@@ -701,9 +910,21 @@ Use this actual data to answer the user's question with specific numbers and dat
         }
       });
 
+      // Sanitize outputs to ensure no credentials are requested accidentally
+      let content = response.data.choices[0].message.content || '';
+      const forbidden = [
+        'password', 'passcode', 'seed phrase', 'seed-phrase', 'private key', 'secret key', '2fa', 'two-factor', 'login', 'credentials',
+        'username', 'email address', 'account login', 'dashboard login', 'provide your login', 'provide your credentials', 'sign in',
+        'product id', 'provide the product id', 'give me your product id', 'log in to your dashboard'
+      ];
+      const hasForbidden = forbidden.some(k => content.toLowerCase().includes(k));
+      if (hasForbidden) {
+        content = 'I can help using your StacksPay data directly. I will never ask for passwords, seed phrases, private keys, or logins. Please ask your question again or specify the product/time period.';
+      }
+
       return {
         success: true,
-        message: response.data.choices[0].message.content,
+        message: content,
         model: this.model
       };
     } catch (error) {
@@ -721,7 +942,7 @@ const chatbotService = new ChatbotService();
 // Chatbot endpoint
 app.post('/api/chat', async (req, res) => {
   try {
-    const { message } = req.body;
+    const { message, merchantAddress } = req.body;
     
     if (!message || typeof message !== 'string' || message.trim().length === 0) {
       return res.status(400).json({ error: 'Message is required' });
@@ -731,7 +952,7 @@ app.post('/api/chat', async (req, res) => {
       return res.status(400).json({ error: 'Message too long (max 500 characters)' });
     }
 
-    const result = await chatbotService.chat(message.trim());
+    const result = await chatbotService.chat(message.trim(), { merchantAddress });
     res.json(result);
   } catch (error) {
     console.error('Chat endpoint error:', error);
@@ -1538,6 +1759,34 @@ app.delete('/api/merchant/wallets/:address', authenticateMerchant, async (req, r
 });
 
 // Subscription Management
+// List subscriptions (merchant-scoped, paginated)
+app.get('/api/subscriptions', authenticateMerchant, async (req, res) => {
+  try {
+    const { page = 1, limit = 50, status } = req.query;
+    const query = { merchantAddress: req.merchantAddress };
+    if (status) query.status = status;
+
+    const pg = Math.max(parseInt(page, 10) || 1, 1);
+    const lm = Math.min(Math.max(parseInt(limit, 10) || 50, 1), 100);
+
+    const [items, total] = await Promise.all([
+      Subscription.find(query)
+        .sort({ createdAt: -1 })
+        .skip((pg - 1) * lm)
+        .limit(lm),
+      Subscription.countDocuments(query)
+    ]);
+
+    res.json({
+      items,
+      pagination: { total, page: pg, pages: Math.ceil(total / lm), limit: lm }
+    });
+  } catch (error) {
+    console.error('List subscriptions error:', error);
+    res.status(500).json({ error: 'Failed to list subscriptions' });
+  }
+});
+
 app.post('/api/subscriptions', authenticateMerchant, async (req, res) => {
   try {
     const {
@@ -1643,6 +1892,38 @@ app.put('/api/subscriptions/:id/cancel', authenticateMerchant, async (req, res) 
     res.status(500).json({ error: 'Failed to cancel subscription' });
   }
 });
+
+// Subscriptions stats (merchant-scoped)
+app.get('/api/subscriptions/stats', authenticateMerchant, async (req, res) => {
+  try {
+    const merchantAddress = req.merchantAddress;
+    const [active, cancelled] = await Promise.all([
+      Subscription.countDocuments({ merchantAddress, status: 'active' }),
+      Subscription.countDocuments({ merchantAddress, status: 'cancelled' })
+    ]);
+
+    const revenueAgg = await Subscription.aggregate([
+      { $match: { merchantAddress, status: 'active' } },
+      { $group: { _id: null, total: { $sum: '$amount' } } }
+    ]);
+    const revenue = revenueAgg?.[0]?.total || 0;
+
+    const now = new Date();
+    const in30 = new Date();
+    in30.setDate(in30.getDate() + 30);
+    const nextPayouts = await Subscription.countDocuments({
+      merchantAddress,
+      status: 'active',
+      nextPaymentDate: { $gte: now, $lte: in30 }
+    });
+
+    res.json({ active, cancelled, revenue, nextPayouts });
+  } catch (error) {
+    console.error('Subscriptions stats error:', error);
+    res.status(500).json({ error: 'Failed to fetch subscription stats' });
+  }
+});
+
 
 // Merchant Statistics
 app.get('/api/merchant/stats', async (req, res) => {

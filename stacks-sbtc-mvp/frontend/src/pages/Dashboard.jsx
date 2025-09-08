@@ -277,12 +277,14 @@ function Dashboard() {
           >
             Create Product
           </Link>
-          <Link
-            to="/docs"
+          <a
+            href="/docs"
+            target="_blank"
+            rel="noopener noreferrer"
             className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 font-medium text-sm"
           >
             Docs
-          </Link>
+          </a>
         </div>
       </div>
 

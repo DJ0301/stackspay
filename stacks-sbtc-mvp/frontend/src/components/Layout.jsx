@@ -21,7 +21,8 @@ import {
   Moon,
   Send,
   Loader2,
-  MessageCircle
+  MessageCircle,
+  RefreshCw
 } from 'lucide-react'
 import ChatWindow from './ChatWindow'
 
@@ -150,7 +151,8 @@ function Layout() {
     { name: 'Home', href: '/dashboard', icon: Home },
     { name: 'Transactions', href: '/payments', icon: CreditCard },
     { name: 'Customers', href: '/customers', icon: Users },
-    { name: 'Product catalog', href: '/products', icon: ShoppingBag }
+    { name: 'Product catalog', href: '/products', icon: ShoppingBag },
+    { name: 'Subscriptions', href: '/subscriptions', icon: RefreshCw }
   ]
 
   const shortcutNav = [
@@ -231,20 +233,33 @@ function Layout() {
               <div className="px-3 pb-2 text-xs font-semibold text-white/60 uppercase tracking-wider">Developer Tools</div>
               <div className="space-y-1">
                 {developerNav.map((item) => (
-                  <NavLink
-                    key={item.name}
-                    to={item.href}
-                    className={({ isActive }) =>
-                      `flex items-center space-x-3 px-3 py-2 rounded-lg transition-colors ${
-                        isActive
-                          ? 'bg-white/10 text-brand'
-                          : 'text-white/80 hover:bg-white/10'
-                      }`
-                    }
-                  >
-                    <item.icon className="w-5 h-5" />
-                    <span>{item.name}</span>
-                  </NavLink>
+                  item.name === 'Docs' ? (
+                    <a
+                      key={item.name}
+                      href="/docs"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="flex items-center space-x-3 px-3 py-2 rounded-lg transition-colors text-white/80 hover:bg-white/10"
+                    >
+                      <item.icon className="w-5 h-5" />
+                      <span>{item.name}</span>
+                    </a>
+                  ) : (
+                    <NavLink
+                      key={item.name}
+                      to={item.href}
+                      className={({ isActive }) =>
+                        `flex items-center space-x-3 px-3 py-2 rounded-lg transition-colors ${
+                          isActive
+                            ? 'bg-white/10 text-brand'
+                            : 'text-white/80 hover:bg-white/10'
+                        }`
+                      }
+                    >
+                      <item.icon className="w-5 h-5" />
+                      <span>{item.name}</span>
+                    </NavLink>
+                  )
                 ))}
               </div>
             </div>

@@ -23,6 +23,7 @@ import APITesting from './pages/APITesting'
 import ProductCheckout from './pages/ProductCheckout'
 import WidgetFrame from './pages/WidgetFrame'
 import Landing from './pages/Landing'
+import Subscriptions from './pages/Subscriptions'
 
 function App() {
   return (
@@ -34,7 +35,6 @@ function App() {
           <Route path="dashboard" element={<Dashboard />} />
           <Route path="payments" element={<Payments />} />
           <Route path="webhooks" element={<Webhooks />} />
-          <Route path="docs" element={<Docs />} />
           <Route path="api-testing" element={<APITesting />} />
           <Route path="integration" element={<Integration />} />
           <Route path="settings" element={<Settings />} />
@@ -54,6 +54,9 @@ function App() {
         </Route>
         <Route path="/widget-builder" element={<ProtectedRoute><Layout /></ProtectedRoute>}>
           <Route index element={<WidgetBuilder />} />
+        </Route>
+        <Route path="/subscriptions" element={<ProtectedRoute><Layout /></ProtectedRoute>}>
+          <Route index element={<Subscriptions />} />
         </Route>
         <Route path="/customers" element={<ProtectedRoute><Layout /></ProtectedRoute>}>
           <Route index element={<Customers />} />
@@ -83,4 +86,3 @@ function App() {
 }
 
 export default App
- 

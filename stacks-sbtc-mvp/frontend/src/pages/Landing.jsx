@@ -1,22 +1,32 @@
 import React, { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { ArrowRight, Sparkles, ShieldCheck, Zap, Bitcoin, Bot } from 'lucide-react'
+import CrazyStarryBackground from '../components/CrazyStarryBackground'
+import { motion } from 'framer-motion'
 
 function Landing() {
   return (
     <div className="relative min-h-screen overflow-hidden text-white">
-      {/* Animated gradient background */}
-      <div className="absolute inset-0 -z-10">
-        <div className="absolute -inset-40 hero-gradient blur-3xl opacity-40" />
-        <div className="absolute inset-0 bg-[radial-gradient(circle_at_1px_1px,rgba(255,255,255,0.08)_1px,transparent_1px)] bg-[length:24px_24px]" />
-        <div className="absolute inset-0 bg-[linear-gradient(rgba(0,0,0,0.4),rgba(0,0,0,0.8))]" />
-      </div>
+      {/* Crazy p5.js animated starry background */}
+      <CrazyStarryBackground />
+      
+      {/* Subtle overlay to ensure text readability */}
+      <div className="absolute inset-0 bg-black/20 -z-5" />
 
       {/* Navbar: centered glowing pill, fixed, collapses to logo-only on scroll */}
       <NavbarPill />
 
       {/* Hero */}
       <section className="container mx-auto px-6 pt-24 md:pt-28 pb-16 md:pb-24 relative">
+        {/* Split hero glows */}
+        <div className="pointer-events-none absolute inset-0 -z-10">
+          {/* Left gradient glow behind text */}
+          <div className="absolute left-0 top-8 w-[60%] h-[60%] rounded-[100%] blur-3xl opacity-30"
+               style={{ background: 'radial-gradient( circle at 20% 30%, rgba(99,102,241,0.6), transparent 60% )' }} />
+          {/* Right spotlight behind logo */}
+          <div className="absolute right-0 top-0 w-[55%] h-[70%] rounded-[100%] blur-3xl opacity-40"
+               style={{ background: 'radial-gradient( circle at 80% 30%, rgba(168,85,247,0.6), transparent 65% )' }} />
+        </div>
         <div className="max-w-3xl">
           <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full border border-white/15 bg-white/5 backdrop-blur text-xs text-white/80">
             <Sparkles className="w-4 h-4 text-orange-300" /> Enterprise Bitcoin Payment Infrastructure
@@ -24,20 +34,27 @@ function Landing() {
           <h1 className="mt-5 text-4xl md:text-6xl font-black leading-tight">
             Accept Bitcoin payments instantly with sBTC on Stacks
           </h1>
-          <p className="mt-5 text-white/80 text-base md:text-lg max-w-2xl">
+          <p className="mt-5 text-base md:text-lg max-w-2xl leading-relaxed" style={{ color: '#B0B0B0' }}>
             Complete Bitcoin payment infrastructure with instant settlement, comprehensive APIs, and intelligent transaction monitoring for modern businesses.
           </p>
           <div className="mt-8 flex flex-wrap items-center gap-3">
-            <Link to="/widget-builder" className="px-5 py-3 rounded-xl text-[#1E1E1E] font-medium hover:scale-[1.02] transition shadow-lg"
-              style={{background:'linear-gradient(90deg,#F7931A 0%,#FFD580 100%)'}}>
-              Get Started
+            {/* Get Started with gradient border + glow hover */}
+            <Link to="/dashboard" className="group relative rounded-xl p-[2px] overflow-hidden">
+              <span className="absolute inset-0 rounded-xl opacity-80 transition duration-300 group-hover:opacity-100"
+                    style={{ background: 'linear-gradient(90deg,#F7931A 0%,#FFD580 100%)' }} />
+              <span className="relative z-10 block px-5 py-3 rounded-[10px] text-[#1E1E1E] font-semibold shadow-lg bg-white"
+                    style={{ background: 'linear-gradient(90deg,#FAD29A 0%,#FFE3B3 100%)' }}>
+                <span className="inline-block transition-transform duration-200 group-hover:scale-[1.03]">Get Started</span>
+              </span>
             </Link>
-            <Link
-              to="/docs"
-              className="px-5 py-3 rounded-xl border border-white/15 bg-white/5 hover:bg-white/10 transition font-medium"
+            <a
+              href="/docs"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="px-5 py-3 rounded-xl border border-white/15 bg-white/10 backdrop-blur-md hover:bg-white/15 transition font-medium text-white/90 shadow-sm"
             >
               View Documentation
-            </Link>
+            </a>
             <div className="inline-flex items-center gap-2 text-white/70 text-sm">
               <ShieldCheck className="w-4 h-4" /> Enterprise-grade security
             </div>
@@ -56,16 +73,35 @@ function Landing() {
               allow="autoplay; fullscreen; xr-spatial-tracking"
               allowFullScreen
             />
-            
+            {/* Orbit animation elements */}
+            <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
+              {/* Glowing orbit ring */}
+              <div
+                className="absolute rounded-full border border-white/20"
+                style={{ width: '110%', height: '110%', filter: 'drop-shadow(0 0 20px rgba(255,255,255,0.35))', animation: 'spin 18s linear infinite' }}
+              />
+              {/* Rotating particles */}
+              <div className="absolute inset-0" style={{ animation: 'spin 12s linear infinite' }}>
+                <span className="absolute left-1/2 top-0 -translate-x-1/2 w-2 h-2 rounded-full bg-white/90 shadow-[0_0_12px_rgba(255,255,255,0.8)]" />
+                <span className="absolute right-2 top-1/3 w-1.5 h-1.5 rounded-full bg-blue-300/90 shadow-[0_0_10px_rgba(147,197,253,0.7)]" />
+                <span className="absolute left-3 bottom-1/3 w-1.5 h-1.5 rounded-full bg-purple-300/90 shadow-[0_0_10px_rgba(196,181,253,0.7)]" />
+              </div>
+              {/* Bitcoin sparks */}
+              <div className="absolute inset-0" style={{ animation: 'spin 8s linear infinite reverse' }}>
+                <span className="absolute top-1/2 -left-1 w-1 h-1 rounded-full bg-orange-300 shadow-[0_0_14px_rgba(251,146,60,0.9)]" />
+                <span className="absolute bottom-2 right-1/4 w-1.5 h-1.5 rounded-full bg-orange-200 shadow-[0_0_16px_rgba(254,215,170,0.9)]" />
+              </div>
+            </div>
           </div>
         </div>
 
         {/* Showcase card */}
         <div className="mt-12 md:mt-16 grid grid-cols-1 md:grid-cols-2 gap-6">
-          <div className="relative rounded-2xl border border-white/10 bg-white/5 backdrop-blur-xl p-6 shadow-xl overflow-hidden">
+          <motion.div whileHover={{ rotateX: -2, rotateY: 2, scale: 1.02 }} transition={{ type: 'spring', stiffness: 300, damping: 20 }} style={{ transformStyle: 'preserve-3d', perspective: 1000 }} className="relative rounded-2xl border border-white/15 bg-white/5 backdrop-blur-xl p-6 shadow-xl overflow-hidden">
             <div className="absolute -right-10 -top-10 w-40 h-40 rounded-full opacity-20" style={{background:'linear-gradient(135deg,#F7931A,#FFD580)'}} />
             <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-xl flex items-center justify-center" style={{background:'linear-gradient(135deg,#F7931A,#FFD580)'}}>
+              <div className="relative w-10 h-10 rounded-xl flex items-center justify-center overflow-visible" style={{background:'linear-gradient(135deg,#F7931A,#FFD580)'}}>
+                <span className="absolute inset-0 rounded-xl" style={{ background: 'radial-gradient(circle, rgba(247,147,26,0.35), transparent 70%)', filter: 'blur(8px)' }} />
                 <Bitcoin className="w-5 h-5 text-[#1E1E1E]" />
               </div>
               <div>
@@ -74,10 +110,11 @@ function Landing() {
               </div>
             </div>
             <p className="mt-4 text-sm text-white/70">Professional dashboard with real-time transaction monitoring and comprehensive analytics.</p>
-          </div>
-          <div className="relative rounded-2xl border border-white/10 bg-white/5 backdrop-blur-xl p-6 shadow-xl">
+          </motion.div>
+          <motion.div whileHover={{ rotateX: -2, rotateY: -2, scale: 1.02 }} transition={{ type: 'spring', stiffness: 300, damping: 20 }} style={{ transformStyle: 'preserve-3d', perspective: 1000 }} className="relative rounded-2xl border border-white/15 bg-white/5 backdrop-blur-xl p-6 shadow-xl">
             <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-xl flex items-center justify-center" style={{background:'linear-gradient(135deg,#F7931A,#FFD580)'}}>
+              <div className="relative w-10 h-10 rounded-xl flex items-center justify-center overflow-visible" style={{background:'linear-gradient(135deg,#F7931A,#FFD580)'}}>
+                <span className="absolute inset-0 rounded-xl" style={{ background: 'radial-gradient(circle, rgba(255,196,77,0.35), transparent 70%)', filter: 'blur(8px)' }} />
                 <Bot className="w-5 h-5 text-[#1E1E1E]" />
               </div>
               <div>
@@ -89,7 +126,7 @@ function Landing() {
             <div className="mt-5 inline-flex items-center gap-2 text-sm text-orange-300">
               Learn more <ArrowRight className="w-4 h-4" />
             </div>
-          </div>
+          </motion.div>
         </div>
       </section>
 

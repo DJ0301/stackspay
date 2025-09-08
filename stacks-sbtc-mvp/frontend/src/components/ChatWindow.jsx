@@ -14,6 +14,7 @@ function ChatWindow({ isOpen, onToggle }) {
   const [inputValue, setInputValue] = useState('')
   const [isLoading, setIsLoading] = useState(false)
   const [isMinimized, setIsMinimized] = useState(false)
+  const [merchantAddress, setMerchantAddress] = useState('')
   const messagesEndRef = useRef(null)
   const inputRef = useRef(null)
 
@@ -30,6 +31,20 @@ function ChatWindow({ isOpen, onToggle }) {
       inputRef.current?.focus()
     }
   }, [isOpen, isMinimized])
+
+  // Fetch merchant and price context for scoping chatbot answers
+  useEffect(() => {
+    const fetchHealth = async () => {
+      try {
+        const res = await axios.get('/api/health')
+        if (res.data?.merchantAddress) setMerchantAddress(res.data.merchantAddress)
+      } catch (e) {
+        // Non-fatal: chatbot will fallback to default merchant if not provided
+        console.debug('ChatWindow: failed to fetch health for merchantAddress')
+      }
+    }
+    fetchHealth()
+  }, [])
 
   const handleSendMessage = async (e) => {
     e.preventDefault()
@@ -48,7 +63,8 @@ function ChatWindow({ isOpen, onToggle }) {
 
     try {
       const response = await axios.post('/api/chat', {
-        message: userMessage.content
+        message: userMessage.content,
+        merchantAddress: merchantAddress || undefined,
       })
 
       const botMessage = {
